@@ -6,7 +6,7 @@
 |-------|---------|
 | **Institución** | Tecnológico Nacional de México – Campus Atlixco |
 | **Carrera** | Ingeniería Mecatrónica |
-| **Materia** | Control de Procesos |
+| **Materia** | Automatización |
 | **Grupo** | 8AB |
 | **Periodo** | Enero – Junio 2026 |
 | **Docente** | Mtro. Raul Eusebio Grande |
