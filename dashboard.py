@@ -7,7 +7,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mqtt_dashboard_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-BROKER_HOST = "192.168.1.82"
+BROKER_HOST = "10.165.252.191"
 BROKER_PORT = 1883
 
 SUBSCRIBE_TOPICS = [

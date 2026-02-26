@@ -15,8 +15,9 @@ def conectarMQTT(client, userdata, flags, rc):
     client.subscribe("pot/uno")
     client.subscribe("pot/dos")
     client.subscribe("pot/tres")
+    client.subscribe("led/estado")
     
-    
+
 def MensajeMQTT(client, userdata, msg):
     print(f"MSJ: {msg.topic} - {msg.payload.decode()}")
     mensaje = msg.payload.decode()
@@ -44,8 +45,9 @@ def save_csv(timestamp, publicador, mensaje):
             writer.writerow(["timestamp", "Publicador", "Mensaje"])
             
         writer.writerow([timestamp, publicador, mensaje])
-            
-csv_file = "Practica1"
+        
+
+csv_file = "Hoy"
             
 MiMQTT = mqtt.Client()
 MiMQTT.on_connect = conectarMQTT
@@ -53,7 +55,7 @@ MiMQTT.on_connect = conectarMQTT
 MiMQTT.on_message = MensajeMQTT
 MiMQTT.on_subscribe = SubcribiendoMQTT
 
-broker = "192.168.1.82"
+broker = "10.165.252.191"
 MiMQTT.connect(broker, 1883, 60)
 
 MiMQTT.loop_forever()
