@@ -30,28 +30,40 @@ El proyecto implementa un sistema de comunicación IoT basado en el protocolo **
 - Una **Raspberry Pi** actúa como **broker MQTT** (servidor intermediario) usando Mosquitto.
 - Un **ESP32** actúa como **publicador** de datos de sensores y como **suscriptor** para recibir comandos de control.
 - Una **PC con Python** actúa como **suscriptor** que recibe y almacena los datos en un archivo CSV.
+- Un **Dashboard Web** (Flask + SocketIO) permite visualizar los datos en tiempo real y controlar el LED desde el navegador.
+- Un **script de envío** Python (`EnviarDatos_MQTT.py`) permite publicar mensajes MQTT de forma interactiva desde consola.
 
 ### Arquitectura del Sistema
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     RED LOCAL WiFi                       │
-│                   (INFINITUM6DD1)                        │
-│                                                         │
-│  ┌──────────┐   publica sensores    ┌───────────────┐   │
-│  │          │ ─────────────────────>│               │   │
-│  │  ESP32   │                       │  Raspberry Pi │   │
-│  │          │ <─────────────────────│  (Mosquitto   │   │
-│  │ GPIO4,   │   comandos LED        │   Broker)     │   │
-│  │ 34,35,36 │                       │  IP:192.168   │   │
-│  └──────────┘                       │     .1.82     │   │
-│                                     │  Puerto: 1883 │   │
-│  ┌──────────┐   recibe datos        │               │   │
-│  │  PC /    │ <─────────────────────│               │   │
-│  │  Python  │                       └───────────────┘   │
-│  │  Script  │                                           │
-│  └──────────┘                                           │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        RED LOCAL WiFi                             │
+│                      (INFINITUM6DD1)                              │
+│                                                                  │
+│  ┌──────────┐   publica sensores     ┌────────────────────────┐  │
+│  │          │ ──────────────────────>│                        │  │
+│  │  ESP32   │                        │     Raspberry Pi       │  │
+│  │          │ <──────────────────────│   (Mosquitto Broker)   │  │
+│  │ GPIO4,   │   comandos LED         │   IP: 10.165.252.191   │  │
+│  │ 34,35,36 │                        │      Puerto: 1883      │  │
+│  └──────────┘                        │                        │  │
+│                                      └───────────┬────────────┘  │
+│                                                  │               │
+│                      ┌───────────────────────────┤               │
+│                      ▼                           ▼               │
+│            ┌──────────────────┐     ┌───────────────────────┐   │
+│            │ RecepcionDatos   │     │  Dashboard Web        │   │
+│            │  _MQTT.py        │     │  (dashboard.py)       │   │
+│            │  Guarda CSV      │     │  Flask + SocketIO     │   │
+│            └──────────────────┘     │  http://localhost:5000│   │
+│                                     └───────────────────────┘   │
+│            ┌──────────────────┐                                  │
+│            │ EnviarDatos      │                                  │
+│            │  _MQTT.py        │                                  │
+│            │  Publica mensajes│                                  │
+│            │  (interactivo)   │                                  │
+│            └──────────────────┘                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -182,7 +194,7 @@ callback() ──> Si recibe "ON"  en "led/uno" → LED HIGH
 
 #### Configuración de conexión
 ```python
-broker = "192.168.1.82"   # IP de la Raspberry Pi
+broker = "10.165.252.191"   # IP del broker MQTT (Raspberry Pi en red del laboratorio)
 puerto = 1883
 ```
 
@@ -192,7 +204,12 @@ client.subscribe("LM35/uno")
 client.subscribe("pot/uno")
 client.subscribe("pot/dos")
 client.subscribe("pot/tres")
+client.subscribe("led/estado")   # Añadido en último commit: registra estado del LED
 ```
+
+#### Archivo CSV generado
+
+El archivo CSV se guarda con el nombre definido en `csv_file`. Actualmente el valor es `"Hoy"` (sin extensión `.csv`), por lo que el archivo generado se llama literalmente **`Hoy`**.
 
 #### Estructura del CSV generado
 
@@ -215,6 +232,154 @@ client.subscribe("pot/tres")
 
 ---
 
+### 4. Publicador Interactivo – Python (`EnviarDatos_MQTT.py`)
+
+**Lenguaje:** Python 3
+**Librerías usadas:**
+- `paho.mqtt.client` – Cliente MQTT
+- `time` – Espera de conexión
+
+#### Descripción
+
+Script de consola que permite enviar mensajes MQTT de forma manual e interactiva. Al ejecutarse, muestra un menú con las opciones de enviar un mensaje o salir.
+
+#### Configuración de conexión
+```python
+broker = "10.165.252.191"
+puerto = 1883
+```
+
+#### Flujo de funcionamiento
+```
+Inicio ──> Conectar al broker ──> loop_start() ──> Espera 1 seg
+             │
+             ▼
+           menu()
+             ├── Opción 1: enviar_mensaje()
+             │     ├── Solicita topic al usuario
+             │     ├── Solicita mensaje al usuario
+             │     └── client.publish(topic, mensaje)
+             └── Opción 2: Salir
+                   ├── client.loop_stop()
+                   └── client.disconnect()
+```
+
+#### Diferencia clave con `RecepcionDatos_MQTT.py`
+
+| Característica | `RecepcionDatos_MQTT.py` | `EnviarDatos_MQTT.py` |
+|----------------|--------------------------|------------------------|
+| Rol | Suscriptor / Logger | Publicador |
+| Tópicos | Fijos (sensores + LED estado) | Libres (ingresados por el usuario) |
+| Modo de ejecución | `loop_forever()` (bloqueante) | `loop_start()` (no bloqueante) + menú |
+| Salida | Archivo CSV | Sin salida a archivo |
+
+---
+
+### 5. Dashboard Web – Flask + SocketIO (`dashboard.py` + `templates/index.html`)
+
+**Lenguaje:** Python 3 (backend) + HTML/CSS/JavaScript (frontend)
+**Librerías usadas:**
+- `flask` – Servidor web
+- `flask-socketio` – WebSockets en tiempo real
+- `paho.mqtt.client` – Cliente MQTT en hilo separado
+
+#### Instalación de dependencias
+```bash
+pip install -r requirements_dashboard.txt
+# Contenido: flask, flask-socketio, paho-mqtt
+```
+
+#### Ejecución
+```bash
+python dashboard.py
+# Acceder en el navegador: http://localhost:5000
+```
+
+#### Configuración
+```python
+BROKER_HOST = "10.165.252.191"
+BROKER_PORT = 1883
+```
+
+#### Arquitectura interna
+
+El dashboard usa dos hilos de ejecución concurrentes:
+
+| Hilo | Responsabilidad |
+|------|----------------|
+| `mqtt_thread` (daemon) | Conecta al broker, suscribe a tópicos, recibe mensajes y los reenvía al frontend vía SocketIO |
+| Hilo principal Flask | Sirve la interfaz web y gestiona los eventos WebSocket del navegador |
+
+#### Tópicos MQTT que maneja
+
+| Tópico | Dirección | Acción |
+|--------|-----------|--------|
+| `pot/uno` | Recibe | Muestra voltaje en tarjeta azul con barra de progreso |
+| `pot/dos` | Recibe | Muestra voltaje en tarjeta morada con barra de progreso |
+| `pot/tres` | Recibe | Muestra voltaje en tarjeta naranja con barra de progreso |
+| `LM35/uno` | Recibe | Muestra temperatura en tarjeta roja con barra de progreso |
+| `led/estado` | Recibe | Actualiza indicador visual del LED (encendido/apagado) |
+| `led/uno` | Publica | Envía `"ON"` o `"OFF"` cuando el usuario presiona los botones |
+
+#### Flujo de datos
+
+```
+[ESP32] ──publica──> [Broker MQTT]
+                          │
+                    [dashboard.py]
+                    on_message() ──> socketio.emit("mqtt_message")
+                          │
+                    [Navegador]
+                    socket.on("mqtt_message") ──> updateSensor() / updateLed()
+
+[Navegador]
+  Botón ON/OFF ──> socket.emit("led_command")
+                          │
+                    [dashboard.py]
+                    handle_led_command() ──> mqtt_client.publish("led/uno", "ON"/"OFF")
+                          │
+                    [Broker MQTT] ──> [ESP32] ──> controla LED GPIO4
+```
+
+#### Interfaz web (`templates/index.html`)
+
+La página web incluye:
+- **Header** con indicador de estado del broker (punto verde = conectado, rojo = desconectado)
+- **4 tarjetas de sensores** (Pot 1, Pot 2, Pot 3, LM35) con valor numérico y barra de progreso animada
+- **Sección de control LED** con indicador visual circular (amarillo brillante = ON) y botones Encender/Apagar
+- **Timestamp** de la última actualización recibida
+
+Tecnologías frontend: HTML5, CSS3 (grid layout, transiciones), JavaScript, Socket.IO v4.7.5 (CDN).
+
+---
+
+### 6. Archivo de datos registrados (`Hoy`)
+
+Archivo CSV generado automáticamente por `RecepcionDatos_MQTT.py` durante la sesión de práctica realizada el **24 de febrero de 2026**. Contiene 365 registros de mediciones.
+
+#### Formato
+```
+timestamp,Publicador,Mensaje
+2026-02-24 15:48:27,pot/dos,2.576
+2026-02-24 15:48:27,LM35/uno,25.275
+2026-02-24 15:48:51,led/estado,ON
+...
+```
+
+#### Tópicos registrados en el archivo
+
+| Tópico | Tipo de dato | Rango observado |
+|--------|-------------|-----------------|
+| `pot/uno` | Voltaje (V) | 0.000 (fijo en esta sesión) |
+| `pot/dos` | Voltaje (V) | ~2.566 – 2.585 V |
+| `pot/tres` | Voltaje (V) | 3.300 V (fijo, máximo) |
+| `LM35/uno` | Temperatura (°C) | ~24.6 – 27.35 °C |
+| `led/estado` | Estado LED | `"ON"` |
+
+> **Nota:** El archivo no tiene extensión `.csv` porque `csv_file = "Hoy"` en el script (sin agregar `.csv`).
+
+---
+
 ## Flujo General del Sistema
 
 ```
@@ -225,20 +390,27 @@ client.subscribe("pot/tres")
    [ESP32 lee ADC]
    convierte a voltaje/temperatura
         │
-        ▼ publica cada 1 seg
+        ▼ publica cada 1 seg (pot/uno, pot/dos, pot/tres, LM35/uno, led/estado)
    [Broker MQTT]
-   Raspberry Pi: 192.168.1.82:1883
+   Raspberry Pi: 10.165.252.191:1883
         │
-        ├──────────────────────────┐
-        ▼                          ▼
-  [Python Script]            [Otros clientes]
-  Guarda datos en CSV        (mosquitto_sub, etc.)
+        ├─────────────────────┬──────────────────────┐
+        ▼                     ▼                      ▼
+  [RecepcionDatos       [dashboard.py]         [Otros clientes]
+   _MQTT.py]            Dashboard Web          (mosquitto_sub,
+  Guarda en CSV "Hoy"   Flask + SocketIO       EnviarDatos, etc.)
+                         http://localhost:5000
 
 [PC / Usuario]
-  ▼ envía "ON" o "OFF" a "led/uno"
+  ├─▶ Botones del dashboard ──▶ socket.emit("led_command")
+  │                              ▼
+  │                         dashboard.py publica en "led/uno"
+  │
+  └─▶ EnviarDatos_MQTT.py (consola interactiva)
+        ▼ publica en cualquier topic ingresado por el usuario
   [Broker MQTT]
-  ▼
-  [ESP32] → enciende/apaga LED en GPIO4
+        ▼
+  [ESP32] → enciende/apaga LED en GPIO4 (si topic = "led/uno")
 ```
 
 ---
@@ -254,18 +426,24 @@ client.subscribe("pot/tres")
 - [x] Código ESP32 con lectura de 3 potenciómetros y sensor LM35
 - [x] Publicación de datos de sensores vía MQTT (cada 1 segundo)
 - [x] Control de LED por MQTT (recepción de comandos ON/OFF)
-- [x] Publicación del estado del LED
-- [x] Script Python receptor y logger de datos en CSV
+- [x] Publicación del estado del LED (`led/estado`)
+- [x] Script Python receptor y logger de datos en CSV (`RecepcionDatos_MQTT.py`)
 - [x] Timestamps en los registros CSV
+- [x] Suscripción a `led/estado` en el script receptor (agregado en último commit)
+- [x] Script Python publicador interactivo (`EnviarDatos_MQTT.py`)
+- [x] Dashboard web en tiempo real con Flask + SocketIO (`dashboard.py`)
+- [x] Interfaz HTML con tarjetas de sensores, barras de progreso y control LED
+- [x] Sesión de prueba registrada (archivo `Hoy`, 365 registros del 24-Feb-2026)
+- [x] Actualización del broker a IP `10.165.252.191` en todos los scripts
 
 ### Pendiente / Observaciones
 
-- [ ] **Bug en Python:** `csv_file = "Practica1"` — falta la extensión `.csv`. El archivo se crea sin extensión. Debería ser `"Practica1.csv"`.
+- [ ] **Bug en Python (ambos scripts):** `csv_file = "Hoy"` — falta la extensión `.csv`. El archivo se crea sin extensión. Debería ser `"Hoy.csv"` (antes era `"Practica1"`, también sin extensión).
 - [ ] El ESP32 suscribe al tópico `"led/uno"` pero el callback responde a cualquier mensaje en ese tópico (no valida que el tópico sea exactamente `"led/uno"` antes de actuar).
 - [ ] La fórmula del LM35 usa referencia de 5V (`adcTemp * 5 / 4095.0`) pero el ESP32 opera a 3.3V — puede generar lecturas incorrectas de temperatura si el LM35 está alimentado a 3.3V.
-- [ ] No hay interfaz gráfica (dashboard) para visualización en tiempo real (Node-RED, Grafana, etc.).
 - [ ] No hay manejo de autenticación MQTT (`allow_anonymous true` — válido para pruebas, no recomendado en producción).
-- [ ] El script Python no tiene manejo de errores de conexión ni reconexión automática.
+- [ ] El script `RecepcionDatos_MQTT.py` no tiene manejo de errores de conexión ni reconexión automática.
+- [ ] El `dashboard.py` captura la excepción de conexión pero no implementa reintentos automáticos.
 
 ---
 
@@ -276,9 +454,15 @@ Comunicacion-MQTT/
 ├── 8AB_AUTOMAT_AC01_OG_Josue.pdf         # Reporte de la práctica (PDF)
 ├── Practica1Seguimiento_MQTT/
 │   └── Practica1Seguimiento_MQTT.ino     # Código Arduino para ESP32
-├── RecepcionDatos_MQTT.py                 # Script Python receptor/logger
-├── README.md                              # (Solo título, sin contenido)
-└── PROYECTO_DESCRIPCION.md               # Este archivo
+├── templates/
+│   └── index.html                        # Interfaz web del dashboard
+├── EnviarDatos_MQTT.py                   # Script Python publicador interactivo (nuevo)
+├── RecepcionDatos_MQTT.py                # Script Python receptor/logger CSV
+├── dashboard.py                          # Dashboard web Flask + SocketIO
+├── requirements_dashboard.txt            # Dependencias del dashboard (flask, flask-socketio, paho-mqtt)
+├── Hoy                                   # CSV con datos registrados el 24-Feb-2026 (365 filas)
+├── README.md                             # (Solo título, sin contenido)
+└── PROYECTO_DESCRIPCION.md              # Este archivo
 ```
 
 ---
@@ -292,9 +476,12 @@ Comunicacion-MQTT/
 | ESP32 | Microcontrolador con WiFi integrado |
 | Arduino C++ | Firmware del ESP32 |
 | PubSubClient | Librería MQTT para Arduino |
-| Python 3 | Script de recepción y almacenamiento |
+| Python 3 | Scripts de recepción, publicación y dashboard |
 | paho-mqtt | Librería MQTT para Python |
-| CSV | Formato de almacenamiento de datos |
+| Flask | Framework web para el dashboard |
+| Flask-SocketIO | WebSockets para actualización en tiempo real |
+| Socket.IO (JS) | Cliente WebSocket en el navegador |
+| CSV | Formato de almacenamiento de datos de sensores |
 | Raspberry Pi | Hardware del broker |
 | LM35 | Sensor de temperatura analógico |
 | Potenciómetros | Simulación de señales analógicas variables |
