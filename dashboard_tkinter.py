@@ -1,10 +1,7 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Dashboard ESP32 MQTT — Interfaz Tkinter
-Equivalente visual del dashboard HTML (dark theme).
-Al ejecutar este script se abre la ventana y se conecta al broker MQTT
-usando la clase MQTTClient definida en mqtt_client.py.
+Created on Fri Feb 20 15:15:17 2026
+@author: oreaj
 """
 
 import tkinter as tk
@@ -12,13 +9,13 @@ from datetime import datetime
 
 from mqtt_client import MQTTClient
 
-# ── Paleta de colores (misma que el HTML) ─────────────────────────────────────
+# Paleta de colores
 BG      = "#0d1117"   # fondo general
 CARD_BG = "#161b22"   # fondo de tarjetas
 BORDER  = "#30363d"   # bordes
 TEXT    = "#e6edf3"   # texto principal
 DIM     = "#8b949e"   # texto secundario
-DIMMER  = "#484f58"   # timestamp
+DIMMER  = "#484f58"   # fecha
 BLUE    = "#58a6ff"   # pot 1
 PURPLE  = "#bc8cff"   # pot 2
 ORANGE  = "#f0883e"   # pot 3
@@ -29,7 +26,7 @@ LED_OFF = "#21262d"   # LED apagado
 BAR_BG  = "#21262d"   # fondo de barras de progreso
 
 
-# ── Widget: tarjeta de sensor ─────────────────────────────────────────────────
+#Widget: tarjeta de sensor
 
 class SensorCard(tk.Frame):
     """Tarjeta oscura con etiqueta, valor grande, unidad y barra de progreso."""
@@ -47,7 +44,7 @@ class SensorCard(tk.Frame):
         self._color = color
         self._pct = 0.0
 
-        # Etiqueta en mayúsculas (ej. "POTENCIÓMETRO 1")
+        # Etiqueta en mayúsculas ("POTENCIÓMETRO 1")
         tk.Label(
             self, text=label.upper(), bg=CARD_BG, fg=DIM,
             font=("Segoe UI", 7, "bold"), anchor="w",
@@ -82,19 +79,19 @@ class SensorCard(tk.Frame):
             self._bar.create_rectangle(0, 0, fill_w, 8, fill=self._color, outline="")
 
     def set_value(self, value: float):
-        """Actualiza el valor mostrado y la barra de progreso."""
+        #Actualiza el valor mostrado y la barra de progreso
         self._val_lbl.config(text=f"{value:.{self._dec}f}")
         span = self._max - self._min
         self._pct = max(0.0, min(100.0, (value - self._min) / span * 100)) if span else 0.0
         self._redraw()
 
 
-# ── Ventana principal ─────────────────────────────────────────────────────────
+#Ventana principal
 
 class Dashboard:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("ESP32 MQTT Dashboard")
+        self.root.title("ESP32 MQTT ")
         self.root.configure(bg=BG)
         self.root.geometry("980x520")
         self.root.minsize(760, 460)
@@ -114,19 +111,19 @@ class Dashboard:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ── Construcción de la UI ─────────────────────────────────────────────────
+    #Inteerfaz
 
     def _build_header(self):
         header = tk.Frame(self.root, bg=BG)
         header.pack(fill="x", padx=24, pady=(20, 0))
 
-        # Título: "ESP32 MQTT Dashboard"
+        # Título: "ESP32 MQTT"
         tk.Label(
             header, text="ESP32 ", bg=BG, fg=BLUE,
             font=("Segoe UI", 18, "bold"),
         ).pack(side="left")
         tk.Label(
-            header, text="MQTT Dashboard", bg=BG, fg=TEXT,
+            header, text="MQTT", bg=BG, fg=TEXT,
             font=("Segoe UI", 18),
         ).pack(side="left")
 
@@ -238,7 +235,7 @@ class Dashboard:
             font=("Segoe UI", 8),
         ).pack(side="right")
 
-    # ── Callbacks MQTT (hilo secundario → programa en main thread) ────────────
+    #Callbacks MQTT (hilo secundario programa en main thread)
 
     def _on_connect(self, connected: bool):
         self.root.after(0, self._set_broker, connected)
@@ -246,7 +243,7 @@ class Dashboard:
     def _on_message(self, topic: str, payload: str):
         self.root.after(0, self._dispatch, topic, payload)
 
-    # ── Actualizaciones de la UI (siempre en el main thread) ─────────────────
+    #Actualizaciones de la UI
 
     def _set_broker(self, connected: bool):
         if connected:
@@ -287,9 +284,6 @@ class Dashboard:
     def _on_close(self):
         self.mqtt.stop()
         self.root.destroy()
-
-
-# ── Punto de entrada ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     root = tk.Tk()

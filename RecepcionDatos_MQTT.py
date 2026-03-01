@@ -47,7 +47,7 @@ def save_csv(timestamp, publicador, mensaje):
         writer.writerow([timestamp, publicador, mensaje])
         
 
-csv_file = "Hoy"
+csv_file = "26-02-26"
             
 MiMQTT = mqtt.Client()
 MiMQTT.on_connect = conectarMQTT
@@ -55,7 +55,7 @@ MiMQTT.on_connect = conectarMQTT
 MiMQTT.on_message = MensajeMQTT
 MiMQTT.on_subscribe = SubcribiendoMQTT
 
-broker = "10.165.252.191"
+broker = "192.168.68.124"
 MiMQTT.connect(broker, 1883, 60)
 
 MiMQTT.loop_forever()
